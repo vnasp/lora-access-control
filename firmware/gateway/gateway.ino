@@ -1,54 +1,51 @@
 // gateway.ino — ESP32-C3 Super Mini
-// Fase 1: prueba de hardware — sin LoRa
-// Fase 2: WiFi + ArduinoOTA (flasheo remoto sin USB)
-
-#include <WiFi.h>
-#include <ArduinoOTA.h>
-
-#include "secrets.h"
+// Recibe datos de nodos vía E32-433T30D (LoRa UART) y los reenvía al backend
 
 #define LED_PIN 8
 
-unsigned long lastHeartbeat = 0;
+// --- E32-433T30D (UART transparente) ---
+// M0 y M1 conectados a GND (modo normal)
+#define E32_TX_PIN  20  // ESP32 TX → E32 RXD
+#define E32_RX_PIN  21  // ESP32 RX ← E32 TXD
+#define E32_BAUD    9600
+
+String rxBuffer = "";
 
 void setup() {
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH);  // active LOW: start with LED off
+  digitalWrite(LED_PIN, HIGH);  // active LOW
+
   Serial.begin(115200);
 
-  // Blink 5x on boot (active LOW)
+  // Blink 5x en boot
   for (int i = 0; i < 5; i++) {
     digitalWrite(LED_PIN, LOW);  delay(100);
     digitalWrite(LED_PIN, HIGH); delay(100);
   }
 
-  // WiFi
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.print("[GATEWAY] Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println();
-  Serial.print("[GATEWAY] IP: ");
-  Serial.println(WiFi.localIP());
+  Serial1.begin(E32_BAUD, SERIAL_8N1, E32_RX_PIN, E32_TX_PIN);
 
-  // OTA
-  ArduinoOTA.setHostname("esp32-gateway");
-  ArduinoOTA.begin();
-
-  Serial.println("[GATEWAY] Ready. OTA enabled.");
+  Serial.println("[GW] Ready. Listening for LoRa packets.");
 }
 
 void loop() {
-  ArduinoOTA.handle();
+  while (Serial1.available()) {
+    char c = Serial1.read();
+    if (c == '\n') {
+      rxBuffer.trim();
+      if (rxBuffer.length() > 0) {
+        Serial.print("[GW] Received: ");
+        Serial.println(rxBuffer);
 
-  if (millis() - lastHeartbeat >= 2000) {
-    lastHeartbeat = millis();
-    Serial.println("[GATEWAY] alive");
+        // Blink al recibir
+        digitalWrite(LED_PIN, LOW);  delay(30);
+        digitalWrite(LED_PIN, HIGH);
 
-    // Heartbeat blink (active LOW)
-    digitalWrite(LED_PIN, LOW);  delay(30);
-    digitalWrite(LED_PIN, HIGH);
+        // TODO: reenviar al backend (via WiFi/MQTT)
+      }
+      rxBuffer = "";
+    } else {
+      rxBuffer += c;
+    }
   }
 }
