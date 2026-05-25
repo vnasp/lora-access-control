@@ -1,12 +1,11 @@
 // gateway.ino — ESP32-C3 Super Mini
 // Recibe datos de nodos vía E32-433T30D (LoRa UART) y los reenvía al backend
 
-#define LED_PIN 8
-
+#define LED_PIN  8
 // --- E32-433T30D (UART transparente) ---
 // M0 y M1 conectados a GND (modo normal)
-#define E32_TX_PIN  20  // ESP32 TX → E32 RXD
-#define E32_RX_PIN  21  // ESP32 RX ← E32 TXD
+#define E32_TX_PIN   5  // ESP32 TX → E32 RXD
+#define E32_RX_PIN   6  // ESP32 RX ← E32 TXD
 #define E32_BAUD    9600
 
 String rxBuffer = "";
@@ -31,17 +30,15 @@ void setup() {
 void loop() {
   while (Serial1.available()) {
     char c = Serial1.read();
+
     if (c == '\n') {
       rxBuffer.trim();
       if (rxBuffer.length() > 0) {
         Serial.print("[GW] Received: ");
         Serial.println(rxBuffer);
 
-        // Blink al recibir
         digitalWrite(LED_PIN, LOW);  delay(30);
         digitalWrite(LED_PIN, HIGH);
-
-        // TODO: reenviar al backend (via WiFi/MQTT)
       }
       rxBuffer = "";
     } else {

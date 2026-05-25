@@ -1,15 +1,14 @@
 // node.ino — ESP32-C3 Super Mini
 // Nodo sensor: genera temperatura ficticia y la transmite por E32-433T30D (LoRa UART)
 
-#define INTERVAL_MS 5000
+#define INTERVAL_MS 1000
 #define LED_PIN     8
 
 // --- E32-433T30D (UART transparente) ---
 // M0 y M1 conectados a GND (fijo en modo normal, sin control por software)
-#define E32_TX_PIN  20  // ESP32 TX → E32 RXD
-#define E32_RX_PIN  21  // ESP32 RX ← E32 TXD
-
-#define E32_BAUD    9600  // baud rate por defecto del E32
+#define E32_TX_PIN   3  // ESP32 TX → E32 RXD
+#define E32_RX_PIN   4  // ESP32 RX ← E32 TXD
+#define E32_BAUD    9600   // SPED=0x1A → UART 9600 8N1 2.4k
 
 unsigned long lastSend = 0;
 float temperature = 22.0;  // temperatura inicial ficticia (°C)
@@ -57,12 +56,5 @@ void loop() {
     digitalWrite(LED_PIN, LOW);
     delay(80);
     digitalWrite(LED_PIN, HIGH);
-  }
-
-  // Loopback test: imprime todo lo que llega por Serial1
-  // (con jumper GPIO20-GPIO21 confirma que el UART llega al E32)
-  while (Serial1.available()) {
-    Serial.print("[NODE] Echo: ");
-    Serial.write(Serial1.read());
   }
 }
