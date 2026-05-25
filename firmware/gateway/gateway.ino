@@ -4,6 +4,7 @@
 
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include <NetworkClientSecure.h>
 #include "secrets.h"
 
 #define LED_PIN      8
@@ -61,9 +62,11 @@ String fetchCodes() {
   if (WiFi.status() != WL_CONNECTED) connectWiFi();
   if (WiFi.status() != WL_CONNECTED) return "";
 
+  NetworkClientSecure client;
+  client.setInsecure();   // skip cert validation (HTTPS sobre red privada)
+
   HTTPClient http;
-  http.begin(API_URL);
-  http.setInsecure();   // skip cert validation (HTTPS sobre red privada)
+  http.begin(client, API_URL);
   http.addHeader("x-gateway-secret", API_SECRET);
 
   int code = http.GET();
@@ -79,6 +82,43 @@ String fetchCodes() {
   }
   http.end();
   return csv;
+}
+
+// ---------------------------------------------------------------------------
+// Envía log de acceso al backend
+// msg formato: "LOG:code,parcel_id"
+// ---------------------------------------------------------------------------
+void sendLog(const String& msg) {
+  String csv     = msg.substring(4);  // quita "LOG:"
+  int    comma   = csv.indexOf(',');
+  if (comma < 0) return;
+  String code      = csv.substring(0, comma);
+  String parcel_id = csv.substring(comma + 1);
+  parcel_id.trim();
+  code.trim();
+
+  if (WiFi.status() != WL_CONNECTED) connectWiFi();
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  NetworkClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.begin(client, API_LOG_URL);
+  http.addHeader("x-gateway-secret", API_SECRET);
+  http.addHeader("Content-Type", "application/json");
+
+  String body = "{\"code\":\"" + code + "\",\"parcel_id\":" + parcel_id + "}";
+  int httpCode = http.POST(body);
+  if (httpCode == 201) {
+    Serial.print("[GW] Log guardado — parcela ");
+    Serial.print(parcel_id);
+    Serial.print(" código ");
+    Serial.println(code);
+  } else {
+    Serial.print("[GW] Log error HTTP: ");
+    Serial.println(httpCode);
+  }
+  http.end();
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +179,9 @@ void loop() {
     char c = Serial1.read();
     if (c == '\n') {
       rxBuffer.trim();
-      if (rxBuffer.length() > 0) {
+      if (rxBuffer.startsWith("LOG:")) {
+        sendLog(rxBuffer);
+      } else if (rxBuffer.length() > 0) {
         Serial.print("[GW] Received: ");
         Serial.println(rxBuffer);
         digitalWrite(LED_PIN, LOW);  delay(30);
