@@ -1,65 +1,67 @@
-import Image from "next/image";
+import { supabase } from "@/lib/supabase";
 
-export default function Home() {
+export const revalidate = 30; // refresca cada 30 segundos
+
+type LogRow = {
+  id: string;
+  timestamp: string;
+  code: string;
+  parcel_id: number | null;
+};
+
+function toChileTime(utc: string) {
+  return new Intl.DateTimeFormat("es-CL", {
+    timeZone: "America/Santiago",
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(new Date(utc));
+}
+
+export default async function Home() {
+  const { data: logs } = await supabase
+    .from("lora_access_logs")
+    .select("id, timestamp, code, parcel_id")
+    .order("timestamp", { ascending: false })
+    .limit(50);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="min-h-screen bg-zinc-50 p-8">
+      <div className="mx-auto max-w-3xl">
+        <h1 className="mb-6 text-2xl font-semibold text-zinc-800">
+          LoRa Gateway — Accesos
+        </h1>
+
+        {!logs || logs.length === 0 ? (
+          <p className="text-zinc-500">Sin registros todavía.</p>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-zinc-100 text-left text-zinc-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Fecha y hora (Chile)</th>
+                  <th className="px-4 py-3 font-medium">Parcela</th>
+                  <th className="px-4 py-3 font-medium">Código</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {(logs as LogRow[]).map((row) => (
+                  <tr key={row.id} className="hover:bg-zinc-50">
+                    <td className="px-4 py-3 text-zinc-700">
+                      {toChileTime(row.timestamp)}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-zinc-800">
+                      {row.parcel_id ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-zinc-600">
+                      {row.code}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
