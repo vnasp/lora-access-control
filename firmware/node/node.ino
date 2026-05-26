@@ -11,27 +11,29 @@
 // M0 y M1 conectados a GND (modo normal)
 #define E32_TX_PIN   3   // ESP32 TX → E32 RXD
 #define E32_RX_PIN   4   // ESP32 RX ← E32 TXD
+#define E32_AUX_PIN  2   // AUX: LOW=ocupado, HIGH=listo
 #define E32_BAUD    9600
 
-// --- Teclado 4x3 ---
-// Filas  → GPIO0, GPIO1, GPIO2, GPIO5
-// Columnas → GPIO6, GPIO7, GPIO10
-const byte ROWS = 4;
-const byte COLS = 3;
+// --- Teclado 4x3 (filas/cols invertidos: GPIO9 queda como INPUT para evitar
+//     conflicto con botón BOOT del ESP32-C3) ---
+const byte ROWS = 3;
+const byte COLS = 4;
 char keys[ROWS][COLS] = {
-  {'1','2','3'},
-  {'4','5','6'},
-  {'7','8','9'},
-  {'*','0','#'}
+  {'1','4','7','*'},
+  {'2','5','8','0'},
+  {'3','6','9','#'}
 };
-byte rowPins[ROWS] = {10, 7, 6, 5};   // invertido: pin1 keypad → GPIO10
-byte colPins[COLS] = {2, 1, 0};        // invertido: pin5 keypad → GPIO2
+byte rowPins[ROWS] = {7, 6, 5};           // columnas físicas → ahora son filas (OUTPUT)
+byte colPins[COLS] = {0, 1, 10, 9};       // filas físicas    → ahora son cols (INPUT_PULLUP)
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 String validCodes[PARCEL_COUNT];
 bool   codesReceived = false;
 String inputCode     = "";
 String rxBuffer      = "";
+
+#define TEST_INTERVAL_MS 5000   // envía temp cada 5 s
+unsigned long lastTestMs = 0;
 
 // ---------------------------------------------------------------------------
 // LED feedback
@@ -103,8 +105,22 @@ void validateCode(const String& code) {
 }
 
 // ---------------------------------------------------------------------------
+// Espera a que AUX baje (LOW=ocupado) y luego suba (HIGH=listo)
+// Timeout 3 s en cada fase para no bloquear indefinidamente
+// ---------------------------------------------------------------------------
+void waitAuxReady() {
+  unsigned long t = millis();
+  while (digitalRead(E32_AUX_PIN) == HIGH && millis() - t < 3000);
+  Serial.print("[AUX] LOW (ocupado) @ "); Serial.println(millis());
+  t = millis();
+  while (digitalRead(E32_AUX_PIN) == LOW  && millis() - t < 3000);
+  Serial.print("[AUX] HIGH (listo)  @ "); Serial.println(millis());
+}
+
+// ---------------------------------------------------------------------------
 void setup() {
-  pinMode(LED_PIN, OUTPUT);
+  pinMode(LED_PIN,    OUTPUT);
+  pinMode(E32_AUX_PIN, INPUT);
   digitalWrite(LED_PIN, HIGH);  // active LOW
 
   Serial.begin(115200);
@@ -115,6 +131,15 @@ void setup() {
   }
 
   Serial1.begin(E32_BAUD, SERIAL_8N1, E32_RX_PIN, E32_TX_PIN);
+
+  // Mensaje de test para verificar transmisión via AUX
+  Serial.println("[NODE] Enviando mensaje de test...");
+  Serial.print("[AUX] antes de enviar: ");
+  Serial.println(digitalRead(E32_AUX_PIN) == HIGH ? "HIGH" : "LOW");
+  Serial1.println("TEST:node-ok");
+  waitAuxReady();
+  Serial.println("[NODE] Transmisión de test completada.");
+
   Serial.println("[NODE] Listo. Ingresá el código y presioná #.");
 }
 
@@ -132,6 +157,17 @@ void loop() {
     } else {
       rxBuffer += c;
     }
+  }
+
+  // --- Envío periódico de temperatura random (test de cables) ---
+  if (millis() - lastTestMs >= TEST_INTERVAL_MS) {
+    lastTestMs = millis();
+    float temp = 15.0 + random(0, 200) / 10.0;  // 15.0 – 34.9 °C
+    String msg = "TEMP:" + String(temp, 1);
+    Serial.print("[TEST] Enviando: "); Serial.println(msg);
+    Serial.print("[AUX] "); Serial.println(digitalRead(E32_AUX_PIN) == HIGH ? "HIGH" : "LOW");
+    Serial1.println(msg);
+    waitAuxReady();
   }
 
   // --- Leer teclado ---
