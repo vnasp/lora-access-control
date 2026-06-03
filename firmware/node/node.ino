@@ -7,15 +7,14 @@
 #define PARCEL_COUNT 15
 #define CODE_LEN     6
 
-// --- E32-433T30D (UART transparente) ---
-// M0 y M1 conectados a GND (modo normal)
-#define E32_TX_PIN   3   // ESP32 TX → E32 RXD
-#define E32_RX_PIN   4   // ESP32 RX ← E32 TXD
-#define E32_AUX_PIN  2   // AUX: LOW=ocupado, HIGH=listo
+// E32-433T30D (UART transparente) — M0 y M1 conectados a GND (modo normal)
+#define E32_TX_PIN   3
+#define E32_RX_PIN   4
+#define E32_AUX_PIN  2
 #define E32_BAUD    9600
 
-// --- Teclado 4x3 (filas/cols invertidos: GPIO9 queda como INPUT para evitar
-//     conflicto con botón BOOT del ESP32-C3) ---
+// Teclado 4x3 — filas/cols invertidos: GPIO9 queda como INPUT para evitar
+// conflicto con botón BOOT del ESP32-C3
 const byte ROWS = 3;
 const byte COLS = 4;
 char keys[ROWS][COLS] = {
@@ -23,23 +22,19 @@ char keys[ROWS][COLS] = {
   {'2','5','8','0'},
   {'3','6','9','#'}
 };
-byte rowPins[ROWS] = {7, 6, 5};           // columnas físicas → ahora son filas (OUTPUT)
-byte colPins[COLS] = {0, 1, 10, 9};       // filas físicas    → ahora son cols (INPUT_PULLUP)
+byte rowPins[ROWS] = {7, 6, 5};
+byte colPins[COLS] = {0, 1, 10, 9};
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 String validCodes[PARCEL_COUNT];
+bool   entryDone[PARCEL_COUNT];
 bool   codesReceived = false;
+int    codesCount    = 0;
 String inputCode     = "";
 String rxBuffer      = "";
 
-#define TEST_INTERVAL_MS 5000   // envía temp cada 5 s
-unsigned long lastTestMs = 0;
-
-// ---------------------------------------------------------------------------
-// LED feedback
 // ---------------------------------------------------------------------------
 void blinkOK() {
-  // 3 blinks rápidos = código válido
   for (int i = 0; i < 3; i++) {
     digitalWrite(LED_PIN, LOW);  delay(80);
     digitalWrite(LED_PIN, HIGH); delay(80);
@@ -47,7 +42,6 @@ void blinkOK() {
 }
 
 void blinkFail() {
-  // 3 blinks lentos = código inválido
   for (int i = 0; i < 3; i++) {
     digitalWrite(LED_PIN, LOW);  delay(400);
     digitalWrite(LED_PIN, HIGH); delay(400);
@@ -70,20 +64,13 @@ void parseCodes(const String& msg) {
     start = comma + 1;
   }
   codesReceived = true;
-  Serial.println("[NODE] Códigos recibidos del gateway.");
-  // Blink 5x rápido para confirmar
-  for (int i = 0; i < 5; i++) {
-    digitalWrite(LED_PIN, LOW);  delay(60);
-    digitalWrite(LED_PIN, HIGH); delay(60);
-  }
+  codesCount    = idx;
+  for (int i = 0; i < PARCEL_COUNT; i++) entryDone[i] = false;
+  Serial.print("[NODE] Códigos recibidos: "); Serial.println(idx);
 }
 
 // ---------------------------------------------------------------------------
-// Valida el código ingresado contra el array
-// ---------------------------------------------------------------------------
 void validateCode(const String& code) {
-  Serial.print("[NODE] Validando: ");
-  Serial.println(code);
   if (!codesReceived) {
     Serial.println("[NODE] Sin códigos cargados aún.");
     blinkFail();
@@ -93,9 +80,16 @@ void validateCode(const String& code) {
     if (validCodes[i] == code) {
       Serial.print("[NODE] ACCESO OK — parcela ");
       Serial.println(i + 1);
-      // Notifica al gateway para que registre en el log
-      String logMsg = "LOG:" + code + "," + String(i + 1) + "\n";
-      Serial1.print(logMsg);
+
+      if (!entryDone[i]) {
+        Serial1.println("LOG:" + code + "," + String(i + 1) + ",ENTRY");
+        entryDone[i] = true;
+      } else {
+        Serial1.println("LOG:" + code + "," + String(i + 1) + ",EXIT");
+        validCodes[i] = "";
+        entryDone[i] = false;
+      }
+
       blinkOK();
       return;
     }
@@ -105,77 +99,35 @@ void validateCode(const String& code) {
 }
 
 // ---------------------------------------------------------------------------
-// Espera a que AUX baje (LOW=ocupado) y luego suba (HIGH=listo)
-// Timeout 3 s en cada fase para no bloquear indefinidamente
-// ---------------------------------------------------------------------------
-void waitAuxReady() {
-  unsigned long t = millis();
-  while (digitalRead(E32_AUX_PIN) == HIGH && millis() - t < 3000);
-  Serial.print("[AUX] LOW (ocupado) @ "); Serial.println(millis());
-  t = millis();
-  while (digitalRead(E32_AUX_PIN) == LOW  && millis() - t < 3000);
-  Serial.print("[AUX] HIGH (listo)  @ "); Serial.println(millis());
-}
-
-// ---------------------------------------------------------------------------
 void setup() {
-  pinMode(LED_PIN,    OUTPUT);
+  pinMode(LED_PIN,     OUTPUT);
   pinMode(E32_AUX_PIN, INPUT);
-  digitalWrite(LED_PIN, HIGH);  // active LOW
+  digitalWrite(LED_PIN, HIGH);
 
   Serial.begin(115200);
-
-  for (int i = 0; i < 5; i++) {
-    digitalWrite(LED_PIN, LOW);  delay(100);
-    digitalWrite(LED_PIN, HIGH); delay(100);
-  }
-
   Serial1.begin(E32_BAUD, SERIAL_8N1, E32_RX_PIN, E32_TX_PIN);
 
-  // Mensaje de test para verificar transmisión via AUX
-  Serial.println("[NODE] Enviando mensaje de test...");
-  Serial.print("[AUX] antes de enviar: ");
-  Serial.println(digitalRead(E32_AUX_PIN) == HIGH ? "HIGH" : "LOW");
-  Serial1.println("TEST:node-ok");
-  waitAuxReady();
-  Serial.println("[NODE] Transmisión de test completada.");
-
-  Serial.println("[NODE] Listo. Ingresá el código y presioná #.");
+  for (int i = 0; i < PARCEL_COUNT; i++) entryDone[i] = false;
 }
 
 // ---------------------------------------------------------------------------
 void loop() {
-  // --- Recibir mensajes LoRa entrantes ---
   while (Serial1.available()) {
     char c = Serial1.read();
     if (c == '\n') {
       rxBuffer.trim();
-      if (rxBuffer.startsWith("CODES:")) {
-        parseCodes(rxBuffer);
-      }
+      int codesIdx = rxBuffer.indexOf("CODES:");
+      if (codesIdx >= 0) parseCodes(rxBuffer.substring(codesIdx));
       rxBuffer = "";
     } else {
       rxBuffer += c;
     }
   }
 
-  // --- Envío periódico de temperatura random (test de cables) ---
-  if (millis() - lastTestMs >= TEST_INTERVAL_MS) {
-    lastTestMs = millis();
-    float temp = 15.0 + random(0, 200) / 10.0;  // 15.0 – 34.9 °C
-    String msg = "TEMP:" + String(temp, 1);
-    Serial.print("[TEST] Enviando: "); Serial.println(msg);
-    Serial.print("[AUX] "); Serial.println(digitalRead(E32_AUX_PIN) == HIGH ? "HIGH" : "LOW");
-    Serial1.println(msg);
-    waitAuxReady();
-  }
-
-  // --- Leer teclado ---
   char key = keypad.getKey();
   if (!key) return;
 
   if (key == '#') {
-    // Confirmar
     if (inputCode.length() == CODE_LEN) {
       validateCode(inputCode);
     } else {
@@ -184,14 +136,8 @@ void loop() {
     }
     inputCode = "";
   } else if (key == '*') {
-    // Limpiar
     inputCode = "";
-    Serial.println("[NODE] Entrada borrada.");
   } else {
-    if (inputCode.length() < CODE_LEN) {
-      inputCode += key;
-      Serial.print("[NODE] Ingresado: ");
-      Serial.println(inputCode);
-    }
+    if (inputCode.length() < CODE_LEN) inputCode += key;
   }
 }
