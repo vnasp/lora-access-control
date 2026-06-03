@@ -1,26 +1,59 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  /* Base */
+  --color-background: #f5f3ee;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f0eee7;
+  --color-border: #d9d4c7;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* Primary greens */
+  --color-primary: #2f6b3f;
+  --color-primary-dark: #1f4d2c;
+  --color-primary-light: #dde9dd;
+  --color-primary-soft: #eef5ee;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Forest / Nature accents */
+  --color-forest: #355e3b;
+  --color-moss: #6e8b61;
+  --color-sage: #a8b79f;
+  --color-earth: #8b7d6b;
+
+  /* Text */
+  --color-text-primary: #1f2a1f;
+  --color-text-secondary: #5f6b5f;
+  --color-text-muted: #8c948c;
+  --color-text-inverse: #ffffff;
+
+  /* Status */
+  --color-success: #4f8a5b;
+  --color-success-bg: #e6f3e8;
+
+  --color-warning: #c98a2e;
+  --color-warning-bg: #fff4df;
+
+  --color-error: #b14a3b;
+  --color-error-bg: #fbe9e6;
+
+  /* Cards / overlays */
+  --color-card: rgba(255, 255, 255, 0.92);
+  --color-overlay: rgba(34, 54, 34, 0.45);
+
+  /* Shadows */
+  --color-shadow-soft: rgba(25, 40, 25, 0.08);
+  --color-shadow-medium: rgba(25, 40, 25, 0.14);
+
+  /* LoRa / Tech accent */
+  --color-accent-blue: #4a7ea8;
+  --color-accent-blue-soft: #dceaf5;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: --var(--font-inter-sans);
+}
+
+@layer base {
+  button {
+    cursor: pointer;
+  }
 }
