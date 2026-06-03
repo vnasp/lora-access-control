@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { code, parcel_id } = body;
+  const { code, parcel_id, event_type } = body;
 
   if (!code || typeof code !== "string") {
     return NextResponse.json({ error: "Missing code" }, { status: 400 });
@@ -17,6 +17,7 @@ export async function POST(request: Request) {
   const { error } = await supabase.from("lora_access_logs").insert({
     code,
     parcel_id: parcel_id ?? null,
+    event_type: event_type ?? null,
     timestamp: new Date().toISOString(),
   });
 
